@@ -1,0 +1,27 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: jdbc:mysql://${DB_HOST:mysql-user}:${DB_PORT:3306}/${DB_NAME:user_db}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:VGhpc0lzQVN0cm9uZ0RlbW9TZWNyZXRLZXlGb3JBZ3JpSW50ZWxKV1QxMjM0NTY3ODkw}
+    expiration-ms: 86400000
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka}

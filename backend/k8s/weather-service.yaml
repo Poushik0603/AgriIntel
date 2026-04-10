@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weather-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weather-service
+  template:
+    metadata:
+      labels:
+        app: weather-service
+    spec:
+      containers:
+        - name: weather-service
+          image: agriintel-weather-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8083
+          env:
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://service-registry:8761/eureka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: weather-service
+spec:
+  selector:
+    app: weather-service
+  ports:
+    - port: 8083
+      targetPort: 8083
+  type: ClusterIP

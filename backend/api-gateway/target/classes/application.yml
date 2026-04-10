@@ -1,0 +1,44 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: crop-service
+          uri: lb://crop-service
+          predicates:
+            - Path=/crop/**
+        - id: price-service
+          uri: lb://price-service
+          predicates:
+            - Path=/price/**
+        - id: weather-service
+          uri: lb://weather-service
+          predicates:
+            - Path=/weather/**
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/auth/**
+        - id: market-data-service
+          uri: lb://market-data-service
+          predicates:
+            - Path=/market-data/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka}

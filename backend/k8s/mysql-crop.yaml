@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-crop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql-crop
+  template:
+    metadata:
+      labels:
+        app: mysql-crop
+    spec:
+      containers:
+        - name: mysql-crop
+          image: mysql:8.0
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: root
+            - name: MYSQL_DATABASE
+              value: crop_db
+          ports:
+            - containerPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-crop
+spec:
+  selector:
+    app: mysql-crop
+  ports:
+    - port: 3306
+      targetPort: 3306
+  type: ClusterIP

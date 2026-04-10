@@ -1,0 +1,10 @@
+com\agriintel\crop\dto\CropRecommendationResponse.class
+com\agriintel\crop\repository\CropRecommendationAuditRepository.class
+com\agriintel\crop\entity\CropRecommendationAudit.class
+com\agriintel\crop\controller\CropController.class
+com\agriintel\crop\service\CropRecommendationService.class
+com\agriintel\crop\config\RestTemplateConfig.class
+com\agriintel\crop\dto\CropRecommendationRequest.class
+com\agriintel\crop\exception\GlobalExceptionHandler.class
+com\agriintel\crop\CropServiceApplication.class
+com\agriintel\crop\dto\WeatherResponse.class

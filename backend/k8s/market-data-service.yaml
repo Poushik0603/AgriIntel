@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: market-data-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: market-data-service
+  template:
+    metadata:
+      labels:
+        app: market-data-service
+    spec:
+      containers:
+        - name: market-data-service
+          image: agriintel-market-data-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8085
+          env:
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://service-registry:8761/eureka
+            - name: DB_HOST
+              value: mysql-market
+            - name: DB_NAME
+              value: market_db
+            - name: DB_USERNAME
+              value: root
+            - name: DB_PASSWORD
+              value: root
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: market-data-service
+spec:
+  selector:
+    app: market-data-service
+  ports:
+    - port: 8085
+      targetPort: 8085
+  type: ClusterIP

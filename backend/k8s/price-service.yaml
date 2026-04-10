@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: price-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: price-service
+  template:
+    metadata:
+      labels:
+        app: price-service
+    spec:
+      containers:
+        - name: price-service
+          image: agriintel-price-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          env:
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: http://service-registry:8761/eureka
+            - name: DB_HOST
+              value: mysql-price
+            - name: DB_NAME
+              value: price_db
+            - name: DB_USERNAME
+              value: root
+            - name: DB_PASSWORD
+              value: root
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: price-service
+spec:
+  selector:
+    app: price-service
+  ports:
+    - port: 8082
+      targetPort: 8082
+  type: ClusterIP

@@ -1,0 +1,128 @@
+version: "3.9"
+
+services:
+  service-registry:
+    build: ./service-registry
+    ports:
+      - "8761:8761"
+
+  api-gateway:
+    build: ./api-gateway
+    depends_on:
+      - service-registry
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+    ports:
+      - "8090:8090"
+
+  weather-service:
+    build: ./weather-service
+    depends_on:
+      - service-registry
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+    ports:
+      - "8083:8083"
+
+  crop-service:
+    build: ./crop-service
+    depends_on:
+      - service-registry
+      - weather-service
+      - mysql-crop
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      DB_HOST: mysql-crop
+      DB_NAME: crop_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8081:8081"
+
+  mysql-user:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: user_db
+    ports:
+      - "3307:3306"
+    volumes:
+      - user_mysql_data:/var/lib/mysql
+
+  mysql-price:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: price_db
+    ports:
+      - "3308:3306"
+    volumes:
+      - price_mysql_data:/var/lib/mysql
+
+  mysql-market:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: market_db
+    ports:
+      - "3309:3306"
+    volumes:
+      - market_mysql_data:/var/lib/mysql
+
+  mysql-crop:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: crop_db
+    ports:
+      - "3310:3306"
+    volumes:
+      - crop_mysql_data:/var/lib/mysql
+
+  user-service:
+    build: ./user-service
+    depends_on:
+      - service-registry
+      - mysql-user
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      DB_HOST: mysql-user
+      DB_NAME: user_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8084:8084"
+
+  price-service:
+    build: ./price-service
+    depends_on:
+      - service-registry
+      - mysql-price
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      DB_HOST: mysql-price
+      DB_NAME: price_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8082:8082"
+
+  market-data-service:
+    build: ./market-data-service
+    depends_on:
+      - service-registry
+      - mysql-market
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      DB_HOST: mysql-market
+      DB_NAME: market_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8085:8085"
+
+volumes:
+  user_mysql_data:
+  price_mysql_data:
+  market_mysql_data:
+  crop_mysql_data:
