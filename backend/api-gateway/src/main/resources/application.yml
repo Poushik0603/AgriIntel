@@ -37,6 +37,14 @@ spring:
           uri: lb://market-data-service
           predicates:
             - Path=/market-data/**
+        - id: insight-service
+          uri: lb://insight-service
+          predicates:
+            - Path=/analysis/**
+        - id: scenario-service
+          uri: lb://scenario-service
+          predicates:
+            - Path=/scenarios/**
 
 eureka:
   client:

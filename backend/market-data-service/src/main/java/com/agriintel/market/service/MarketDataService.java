@@ -2,11 +2,16 @@ package com.agriintel.market.service;
 
 import com.agriintel.market.dto.CropPriceHistoryRequest;
 import com.agriintel.market.dto.CropPriceHistoryResponse;
+import com.agriintel.market.dto.MarketTrendSummaryResponse;
 import com.agriintel.market.entity.CropPriceHistory;
 import com.agriintel.market.exception.ResourceNotFoundException;
 import com.agriintel.market.repository.CropPriceHistoryRepository;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -23,8 +28,8 @@ public class MarketDataService {
         return mapResponse(repository.save(entity));
     }
 
-    public List<CropPriceHistoryResponse> findAll() {
-        return repository.findAll().stream().map(this::mapResponse).toList();
+    public List<CropPriceHistoryResponse> findAll(String crop, LocalDate fromDate, LocalDate toDate) {
+        return repository.findByFilters(crop, fromDate, toDate).stream().map(this::mapResponse).toList();
     }
 
     public CropPriceHistoryResponse findById(Long id) {
@@ -43,6 +48,30 @@ public class MarketDataService {
             throw new ResourceNotFoundException("Market data not found");
         }
         repository.deleteById(id);
+    }
+
+    public MarketTrendSummaryResponse getTrendSummary(String crop, LocalDate fromDate, LocalDate toDate) {
+        List<CropPriceHistory> records = repository.findByFilters(crop, fromDate, toDate);
+        if (records.isEmpty()) {
+            throw new ResourceNotFoundException("No market data found for the provided filters");
+        }
+
+        BigDecimal averagePrice = records.stream()
+                .map(CropPriceHistory::getPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .divide(BigDecimal.valueOf(records.size()), 2, RoundingMode.HALF_UP);
+
+        BigDecimal minPrice = records.stream().map(CropPriceHistory::getPrice).min(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal maxPrice = records.stream().map(CropPriceHistory::getPrice).max(BigDecimal::compareTo).orElse(BigDecimal.ZERO);
+        BigDecimal latestPrice = records.stream()
+                .max(Comparator.comparing(CropPriceHistory::getRecordDate).thenComparing(CropPriceHistory::getId))
+                .map(CropPriceHistory::getPrice)
+                .orElse(BigDecimal.ZERO);
+
+        LocalDate effectiveFromDate = fromDate != null ? fromDate : records.stream().map(CropPriceHistory::getRecordDate).min(LocalDate::compareTo).orElse(null);
+        LocalDate effectiveToDate = toDate != null ? toDate : records.stream().map(CropPriceHistory::getRecordDate).max(LocalDate::compareTo).orElse(null);
+
+        return new MarketTrendSummaryResponse(crop, effectiveFromDate, effectiveToDate, records.size(), averagePrice, minPrice, maxPrice, latestPrice);
     }
 
     private CropPriceHistory mapRequest(CropPriceHistoryRequest request, CropPriceHistory entity) {

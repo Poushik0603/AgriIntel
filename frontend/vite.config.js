@@ -11,6 +11,8 @@ export default defineConfig({
       "/crop": "http://localhost:8090",
       "/price": "http://localhost:8090",
       "/market-data": "http://localhost:8090",
+      "/analysis": "http://localhost:8090",
+      "/scenarios": "http://localhost:8090",
     },
   },
 });

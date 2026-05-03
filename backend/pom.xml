@@ -23,6 +23,8 @@
         <module>crop-service</module>
         <module>market-data-service</module>
         <module>price-service</module>
+        <module>insight-service</module>
+        <module>scenario-service</module>
     </modules>
 
     <properties>

@@ -7,6 +7,8 @@ public record CropRecommendationResponse(
         double rainfall,
         double temperature,
         String city,
-        List<String> recommendedCrops
+        List<CropScoreResponse> recommendedCrops,
+        SoilSnapshot soilSnapshot,
+        String summary
 ) {
 }

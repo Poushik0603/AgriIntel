@@ -6,6 +6,13 @@ public record CropRecommendationRequest(
         @NotBlank String soilType,
         Double rainfall,
         Double temperature,
-        String city
+        String city,
+        Double latitude,
+        Double longitude,
+        Double soilPh,
+        Double moisture,
+        Double nitrogen,
+        Double phosphorus,
+        Double potassium
 ) {
 }

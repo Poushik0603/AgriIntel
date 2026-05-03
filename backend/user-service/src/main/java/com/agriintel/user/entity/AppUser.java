@@ -23,6 +23,10 @@ public class AppUser {
     @Column(nullable = false)
     private Role role;
 
+    private String organization;
+
+    private String workAddress;
+
     public Long getId() {
         return id;
     }
@@ -61,5 +65,21 @@ public class AppUser {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public String getOrganization() {
+        return organization;
+    }
+
+    public void setOrganization(String organization) {
+        this.organization = organization;
+    }
+
+    public String getWorkAddress() {
+        return workAddress;
+    }
+
+    public void setWorkAddress(String workAddress) {
+        this.workAddress = workAddress;
     }
 }

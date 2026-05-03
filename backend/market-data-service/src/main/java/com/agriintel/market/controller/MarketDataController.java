@@ -2,11 +2,13 @@ package com.agriintel.market.controller;
 
 import com.agriintel.market.dto.CropPriceHistoryRequest;
 import com.agriintel.market.dto.CropPriceHistoryResponse;
+import com.agriintel.market.dto.MarketTrendSummaryResponse;
 import com.agriintel.market.service.MarketDataService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -26,8 +28,17 @@ public class MarketDataController {
     }
 
     @GetMapping
-    public List<CropPriceHistoryResponse> findAll() {
-        return marketDataService.findAll();
+    public List<CropPriceHistoryResponse> findAll(@RequestParam(required = false) String crop,
+                                                  @RequestParam(required = false) LocalDate fromDate,
+                                                  @RequestParam(required = false) LocalDate toDate) {
+        return marketDataService.findAll(crop, fromDate, toDate);
+    }
+
+    @GetMapping("/trends/summary")
+    public MarketTrendSummaryResponse getTrendSummary(@RequestParam(required = false) String crop,
+                                                      @RequestParam(required = false) LocalDate fromDate,
+                                                      @RequestParam(required = false) LocalDate toDate) {
+        return marketDataService.getTrendSummary(crop, fromDate, toDate);
     }
 
     @GetMapping("/{id}")

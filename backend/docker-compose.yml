@@ -121,8 +121,46 @@ services:
     ports:
       - "8085:8085"
 
+  insight-service:
+    build: ./insight-service
+    depends_on:
+      - service-registry
+      - weather-service
+      - crop-service
+      - price-service
+      - market-data-service
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+    ports:
+      - "8086:8086"
+
+  mysql-scenario:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: scenario_db
+    ports:
+      - "3311:3306"
+    volumes:
+      - scenario_mysql_data:/var/lib/mysql
+
+  scenario-service:
+    build: ./scenario-service
+    depends_on:
+      - service-registry
+      - mysql-scenario
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      DB_HOST: mysql-scenario
+      DB_NAME: scenario_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+    ports:
+      - "8087:8087"
+
 volumes:
   user_mysql_data:
   price_mysql_data:
   market_mysql_data:
   crop_mysql_data:
+  scenario_mysql_data:
