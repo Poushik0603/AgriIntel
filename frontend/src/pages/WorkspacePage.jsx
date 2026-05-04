@@ -1,23 +1,163 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import L from "leaflet";
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useAppContext } from "../app/AppContext";
-import { cropService, priceService, reverseGeocode, weatherService } from "../services/api";
+import Modal from "../components/ui/Modal";
+import { cropService, priceService, reverseGeocode, searchLocations, weatherService } from "../services/api";
 import { formatCurrency, formatDateShort, formatPercent } from "../utils/formatters";
 
 const defaultCoordinates = { latitude: 11.0168, longitude: 76.9558 };
+const fieldMarkerIcon = L.divIcon({
+  className: "leaflet-field-marker",
+  html: "<span></span>",
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
 
-function mapPointToCoordinates(event) {
-  const rect = event.currentTarget.getBoundingClientRect();
-  const x = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-  const y = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+function coordinatesToMapPoint(latitude, longitude) {
+  const x = Math.min(100, Math.max(0, ((Number(longitude) - 68) / 30) * 100));
+  const y = Math.min(100, Math.max(0, (1 - (Number(latitude) - 6) / 30) * 100));
+  return { x, y };
+}
 
+function withMarkerPosition(nextCoordinates) {
+  const point = coordinatesToMapPoint(nextCoordinates.latitude, nextCoordinates.longitude);
   return {
-    latitude: Number((6 + (1 - y) * 30).toFixed(5)),
-    longitude: Number((68 + x * 30).toFixed(5)),
-    x: x * 100,
-    y: y * 100,
+    latitude: Number(Number(nextCoordinates.latitude).toFixed(5)),
+    longitude: Number(Number(nextCoordinates.longitude).toFixed(5)),
+    x: point.x,
+    y: point.y,
   };
+}
+
+function MiniMapPreview({ coordinates }) {
+  return (
+    <MapContainer
+      className="mini-leaflet-map"
+      center={[coordinates.latitude, coordinates.longitude]}
+      zoom={10}
+      dragging={false}
+      doubleClickZoom={false}
+      scrollWheelZoom={false}
+      zoomControl={false}
+      attributionControl={false}
+      keyboard={false}
+    >
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <MapCenterSync coordinates={coordinates} />
+      <Marker icon={fieldMarkerIcon} position={[coordinates.latitude, coordinates.longitude]} />
+    </MapContainer>
+  );
+}
+
+function MapCenterSync({ coordinates }) {
+  const map = useMap();
+  useEffect(() => {
+    const resizeTimer = window.setTimeout(() => map.invalidateSize(), 80);
+    map.setView([coordinates.latitude, coordinates.longitude], map.getZoom(), { animate: true });
+    return () => window.clearTimeout(resizeTimer);
+  }, [coordinates.latitude, coordinates.longitude, map]);
+
+  return null;
+}
+
+function MapClickHandler({ onPick }) {
+  useMapEvents({
+    click(event) {
+      onPick({ latitude: event.latlng.lat, longitude: event.latlng.lng });
+    },
+  });
+
+  return null;
+}
+
+function LeafletMapPicker({ coordinates, onPick, onLocationResolved }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+
+  async function handleSearch(event) {
+    event.preventDefault();
+    setSearchError("");
+    setSearching(true);
+    try {
+      const nextResults = await searchLocations(query);
+      setResults(nextResults);
+      if (!nextResults.length) {
+        setSearchError("No matching address found.");
+      }
+    } catch (error) {
+      setSearchError(error.message || "Address search failed.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function selectAddress(result) {
+    onPick({ latitude: result.latitude, longitude: result.longitude });
+    onLocationResolved({
+      label: result.label,
+      city: result.city,
+      source: result.source,
+    });
+    setQuery(result.label);
+    setResults([]);
+  }
+
+  return (
+    <div className="leaflet-picker">
+      <form className="map-search-form" onSubmit={handleSearch}>
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search village, city, district, or field address"
+        />
+        <button type="submit" disabled={searching}>
+          {searching ? "Searching..." : "Search"}
+        </button>
+      </form>
+
+      {searchError ? <p className="map-search-error">{searchError}</p> : null}
+      {results.length ? (
+        <div className="map-search-results">
+          {results.map((result) => (
+            <button type="button" key={`${result.latitude}-${result.longitude}`} onClick={() => selectAddress(result)}>
+              <strong>{result.city}</strong>
+              <span>{result.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <MapContainer
+        className="leaflet-map-canvas"
+        center={[coordinates.latitude, coordinates.longitude]}
+        zoom={12}
+        scrollWheelZoom
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <MapCenterSync coordinates={coordinates} />
+        <MapClickHandler onPick={onPick} />
+        <Marker
+          draggable
+          icon={fieldMarkerIcon}
+          position={[coordinates.latitude, coordinates.longitude]}
+          eventHandlers={{
+            dragend(event) {
+              const position = event.target.getLatLng();
+              onPick({ latitude: position.lat, longitude: position.lng });
+            },
+          }}
+        />
+      </MapContainer>
+    </div>
+  );
 }
 
 function fallbackAnalysis(coordinates, location) {
@@ -118,9 +258,13 @@ function normalizeRecommendation(item, index) {
 export default function WorkspacePage() {
   const navigate = useNavigate();
   const { dashboardId } = useParams();
-  const { apiBase, createDashboard, dashboards, session, updateDashboard } = useAppContext();
+  const { apiBase, createDashboard, dashboards, deleteDashboard, session, updateDashboard } = useAppContext();
   const [search, setSearch] = useState("");
   const [coordinates, setCoordinates] = useState({ ...defaultCoordinates, x: 52, y: 40 });
+  const [coordinateDraft, setCoordinateDraft] = useState({
+    latitude: String(defaultCoordinates.latitude),
+    longitude: String(defaultCoordinates.longitude),
+  });
   const [location, setLocation] = useState({ label: "Coimbatore Region", city: "Coimbatore", source: "Default field" });
   const [analysis, setAnalysis] = useState(null);
   const [selectedCrop, setSelectedCrop] = useState("");
@@ -129,6 +273,13 @@ export default function WorkspacePage() {
   const [loading, setLoading] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [message, setMessage] = useState("");
+  const [mapModalOpen, setMapModalOpen] = useState(false);
+  const [manualCoordinateModalOpen, setManualCoordinateModalOpen] = useState(false);
+  const [tierModalOpen, setTierModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingDashboard, setDeletingDashboard] = useState(false);
+  const [geocodingLocation, setGeocodingLocation] = useState(false);
+  const [dashboardMenu, setDashboardMenu] = useState(null);
 
   const filteredDashboards = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -151,23 +302,92 @@ export default function WorkspacePage() {
     () => (analysis?.crop?.recommendedCrops || []).map(normalizeRecommendation),
     [analysis]
   );
+  const recommendationList = useMemo(
+    () => (recommendations.length ? recommendations : (activeDashboard?.recommendedCrops || []).map(normalizeRecommendation)),
+    [activeDashboard?.recommendedCrops, recommendations]
+  );
+  const visibleRecommendations = useMemo(() => {
+    const topThree = recommendationList.slice(0, 3);
+    const selectedOutsideTopThree = selectedCrop && !topThree.some((item) => item.crop === selectedCrop);
 
-  const selectedRecommendation = recommendations.find((item) => item.crop === selectedCrop) || recommendations[0];
+    if (selectedOutsideTopThree) {
+      const selectedItem = recommendationList.find((item) => item.crop === selectedCrop);
+      if (selectedItem) {
+        return [...topThree.slice(0, 2), selectedItem];
+      }
+    }
+
+    return topThree;
+  }, [recommendationList, selectedCrop]);
+
+  const selectedRecommendation = recommendationList.find((item) => item.crop === selectedCrop) || recommendationList[0];
+  const dashboardMenuItem = dashboardMenu
+    ? dashboards.find((item) => String(item.id) === String(dashboardMenu.dashboardId))
+    : null;
 
   useEffect(() => {
     if (activeDashboard) {
       setReportNotes(activeDashboard.reportNotes || "");
+      setLocation({
+        label: activeDashboard.location || "Unmapped field",
+        city: activeDashboard.location || "Mapped field",
+        source: activeDashboard.coordinates ? "Saved dashboard" : "Default field",
+      });
       if (activeDashboard.coordinates) {
-        setCoordinates({ ...activeDashboard.coordinates, x: activeDashboard.coordinates.x || 52, y: activeDashboard.coordinates.y || 40 });
+        setCoordinates({
+          ...activeDashboard.coordinates,
+          x: activeDashboard.coordinates.x ?? 52,
+          y: activeDashboard.coordinates.y ?? 40,
+        });
       }
     }
   }, [activeDashboard]);
 
   useEffect(() => {
-    if (!selectedCrop && recommendations.length) {
-      setSelectedCrop(recommendations[0].crop);
+    setCoordinateDraft({
+      latitude: String(coordinates.latitude),
+      longitude: String(coordinates.longitude),
+    });
+  }, [coordinates.latitude, coordinates.longitude]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setGeocodingLocation(true);
+      reverseGeocode(coordinates.latitude, coordinates.longitude)
+        .then((geocode) => {
+          if (!cancelled) {
+            setLocation(geocode);
+            if (activeDashboard) {
+              updateDashboard(
+                activeDashboard.id,
+                {
+                  coordinates,
+                  location: geocode.label,
+                },
+                { sync: true }
+              );
+            }
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setGeocodingLocation(false);
+          }
+        });
+    }, 550);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeDashboard?.id, coordinates.latitude, coordinates.longitude]);
+
+  useEffect(() => {
+    if (recommendationList.length && (!selectedCrop || !recommendationList.some((item) => item.crop === selectedCrop))) {
+      setSelectedCrop(recommendationList[0].crop);
     }
-  }, [recommendations, selectedCrop]);
+  }, [recommendationList, selectedCrop]);
 
   useEffect(() => {
     if (!selectedCrop) {
@@ -199,8 +419,42 @@ export default function WorkspacePage() {
     navigate(`/workspace/${dashboard.id}`);
   }
 
-  function handleMapClick(event) {
-    setCoordinates(mapPointToCoordinates(event));
+  function openDashboardMenu(event, dashboardId) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDashboardMenu({
+      dashboardId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function closeDashboardMenu() {
+    setDashboardMenu(null);
+  }
+
+  const handleCoordinatePick = useCallback((nextCoordinates) => {
+    setCoordinates(withMarkerPosition(nextCoordinates));
+    setMessage("");
+  }, []);
+
+  function applyManualCoordinates(event) {
+    event.preventDefault();
+    const latitude = Number(coordinateDraft.latitude);
+    const longitude = Number(coordinateDraft.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      setMessage("Enter valid latitude (-90 to 90) and longitude (-180 to 180).");
+      return;
+    }
+
+    handleCoordinatePick({ latitude, longitude });
+    setMessage("Coordinates updated. Run analysis to refresh weather, soil, and recommendations.");
+    setManualCoordinateModalOpen(false);
+  }
+
+  function handleMapClick() {
+    setMapModalOpen(true);
   }
 
   function useDeviceLocation() {
@@ -211,12 +465,12 @@ export default function WorkspacePage() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setCoordinates({
-          latitude: Number(position.coords.latitude.toFixed(5)),
-          longitude: Number(position.coords.longitude.toFixed(5)),
-          x: 52,
-          y: 40,
-        });
+        setCoordinates(
+          withMarkerPosition({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          })
+        );
         setMessage("Device coordinates captured.");
       },
       () => setMessage("Could not access device location.")
@@ -249,6 +503,7 @@ export default function WorkspacePage() {
           longitude: coordinates.longitude,
           rainfall: weather?.rainfall ?? null,
           temperature: weather?.temperature ?? null,
+          humidity: weather?.humidity ?? null,
         },
         apiBase,
         session?.token
@@ -269,7 +524,7 @@ export default function WorkspacePage() {
         riskSnapshot: topRisk,
         status: topRisk,
         insights: [
-          `Weather baseline for ${geocode.city}: ${Math.round(weather.temperature)} deg C, ${Math.round(weather.humidity)}% humidity, ${Math.round(weather.rainfall)} mm rainfall.`,
+          `Weather baseline for ${geocode.city}: ${Math.round(weather.temperature)} C, ${Math.round(weather.humidity)}% humidity, ${Math.round(weather.rainfall)} mm rainfall.`,
           `Top crop recommendation: ${cropNames[0] || "Unavailable"}.`,
           `Soil source: ${crop.soilSnapshot?.source || "Estimated profile"}.`,
         ],
@@ -287,7 +542,7 @@ export default function WorkspacePage() {
         riskSnapshot: "Medium",
         status: "Medium",
         insights: [
-          `Fallback weather baseline for ${geocode.city}: ${nextAnalysis.weather.temperature} deg C.`,
+          `Fallback weather baseline for ${geocode.city}: ${nextAnalysis.weather.temperature} C.`,
           `Top crop recommendation: ${nextAnalysis.crop.recommendedCrops[0].crop}.`,
           "NPK values were approximated from climate and coordinate signals.",
         ],
@@ -307,9 +562,71 @@ export default function WorkspacePage() {
     setMessage("Report notes saved.");
   }
 
+  async function saveDashboardFromMenu() {
+    const targetDashboard = dashboardMenuItem || activeDashboard;
+    if (!targetDashboard) {
+      return;
+    }
+
+    await updateDashboard(targetDashboard.id, {
+      coordinates: targetDashboard.id === activeDashboard?.id ? coordinates : targetDashboard.coordinates,
+      location: targetDashboard.id === activeDashboard?.id ? location.label : targetDashboard.location,
+      reportNotes: targetDashboard.id === activeDashboard?.id ? reportNotes : targetDashboard.reportNotes,
+      selectedCrops: targetDashboard.selectedCrops,
+      recommendedCrops: targetDashboard.recommendedCrops,
+      insights: targetDashboard.insights,
+      riskSnapshot: targetDashboard.riskSnapshot,
+      status: targetDashboard.status,
+    });
+    setMessage("Dashboard saved.");
+    closeDashboardMenu();
+  }
+
   function moveToPricePrediction() {
     navigate(`/market-intelligence?crop=${encodeURIComponent(selectedCrop || selectedRecommendation?.crop || "Rice")}`);
   }
+
+  async function confirmDeleteDashboard() {
+    if (!activeDashboard) {
+      return;
+    }
+
+    setDeletingDashboard(true);
+    const remainingDashboards = await deleteDashboard(activeDashboard.id);
+    setDeletingDashboard(false);
+    setDeleteModalOpen(false);
+
+    const nextDashboard = remainingDashboards[0];
+    navigate(nextDashboard ? `/workspace/${nextDashboard.id}` : "/workspace");
+  }
+
+  useEffect(() => {
+    if (!dashboardMenu) {
+      return undefined;
+    }
+
+    function handleDismiss() {
+      closeDashboardMenu();
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        closeDashboardMenu();
+      }
+    }
+
+    window.addEventListener("click", handleDismiss);
+    window.addEventListener("scroll", handleDismiss, true);
+    window.addEventListener("resize", handleDismiss);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("click", handleDismiss);
+      window.removeEventListener("scroll", handleDismiss, true);
+      window.removeEventListener("resize", handleDismiss);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [dashboardMenu]);
 
   const weather = analysis?.weather;
   const soil = analysis?.crop?.soilSnapshot;
@@ -350,6 +667,7 @@ export default function WorkspacePage() {
               key={dashboard.id}
               className={`archive-item ${String(activeDashboard.id) === String(dashboard.id) ? "active" : ""}`}
               to={`/workspace/${dashboard.id}`}
+              onContextMenu={(event) => openDashboardMenu(event, dashboard.id)}
             >
               <strong>{dashboard.title}</strong>
               <span>{dashboard.location}</span>
@@ -357,6 +675,30 @@ export default function WorkspacePage() {
             </Link>
           ))}
         </div>
+
+        {dashboardMenu && dashboardMenuItem ? (
+          <div
+            className="dashboard-context-menu"
+            style={{ left: `${dashboardMenu.x}px`, top: `${dashboardMenu.y}px` }}
+            role="menu"
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <button type="button" onClick={saveDashboardFromMenu}>
+              Save dashboard
+            </button>
+            <button
+              type="button"
+              className="danger-option"
+              onClick={() => {
+                setDeleteModalOpen(true);
+                closeDashboardMenu();
+              }}
+            >
+              Delete dashboard
+            </button>
+          </div>
+        ) : null}
       </aside>
 
       <section className="workspace-main">
@@ -365,24 +707,51 @@ export default function WorkspacePage() {
             <p className="eyebrow">Analytics workspace</p>
             <h2>{activeDashboard.title}</h2>
           </div>
-          <button className="new-dashboard-button" type="button" onClick={runLandDiscovery} disabled={loading}>
-            <span className="pin-icon" />
-            {loading ? "Analyzing land..." : "Find your land"}
-          </button>
+          <div className="workspace-toolbar-actions">
+            <button className="new-dashboard-button" type="button" onClick={runLandDiscovery} disabled={loading}>
+              <span className="pin-icon" />
+              {loading ? "Analyzing land..." : "Find your land"}
+            </button>
+          </div>
         </div>
 
         <section className="map-panel">
-          <div className="interactive-map" onClick={handleMapClick} role="button" tabIndex={0}>
-            <span className="map-marker" style={{ left: `${coordinates.x || 52}%`, top: `${coordinates.y || 40}%` }} />
-            <div className="map-grid-lines" />
+          <div
+            className="interactive-map mini-map-shell"
+            onClick={handleMapClick}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                handleMapClick();
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            title="Open map selector"
+          >
+            <MiniMapPreview coordinates={coordinates} />
+            <div className="mini-map-overlay">
+              <span>{location.city || "Mapped field"}</span>
+              <strong>
+                {coordinates.latitude}, {coordinates.longitude}
+              </strong>
+            </div>
           </div>
           <div className="map-side">
             <span>Marked coordinates</span>
             <strong>
               {coordinates.latitude}, {coordinates.longitude}
             </strong>
+            <span>Detected land region</span>
             <p>{location.label}</p>
-            <small>{location.source}</small>
+            <small>{geocodingLocation ? "Resolving location..." : location.source}</small>
+            <div className="button-row">
+              <button type="button" onClick={() => setMapModalOpen(true)}>
+                Open map
+              </button>
+              <button type="button" onClick={() => setManualCoordinateModalOpen(true)}>
+                Give coordinates manually
+              </button>
+            </div>
             <div className="button-row">
               <button type="button" onClick={useDeviceLocation}>
                 Use device location
@@ -394,6 +763,85 @@ export default function WorkspacePage() {
           </div>
         </section>
 
+        <Modal
+          open={mapModalOpen}
+          title="Select field coordinates"
+          description="Click anywhere on the map or drag the marker, then run analysis with those coordinates."
+          onClose={() => setMapModalOpen(false)}
+          footer={
+            <div className="modal-coordinate-footer">
+              <span>
+                {coordinates.latitude}, {coordinates.longitude}
+              </span>
+              <button className="new-dashboard-button" type="button" onClick={() => setMapModalOpen(false)}>
+                Use these coordinates
+              </button>
+            </div>
+          }
+        >
+          <LeafletMapPicker coordinates={coordinates} onPick={handleCoordinatePick} onLocationResolved={setLocation} />
+        </Modal>
+
+        <Modal
+          open={manualCoordinateModalOpen}
+          title="Give coordinates manually"
+          description="Enter latitude and longitude for the field you want AgriIntel to analyze."
+          onClose={() => setManualCoordinateModalOpen(false)}
+          footer={
+            <div className="modal-coordinate-footer">
+              <button className="quiet-button" type="button" onClick={() => setManualCoordinateModalOpen(false)}>
+                Cancel
+              </button>
+              <button className="new-dashboard-button" type="submit" form="manual-coordinate-form">
+                Apply coordinates
+              </button>
+            </div>
+          }
+        >
+          <form id="manual-coordinate-form" className="coordinate-form modal-coordinate-form" onSubmit={applyManualCoordinates}>
+            <label>
+              Latitude
+              <input
+                value={coordinateDraft.latitude}
+                onChange={(event) => setCoordinateDraft((current) => ({ ...current, latitude: event.target.value }))}
+                inputMode="decimal"
+                placeholder="11.0168"
+              />
+            </label>
+            <label>
+              Longitude
+              <input
+                value={coordinateDraft.longitude}
+                onChange={(event) => setCoordinateDraft((current) => ({ ...current, longitude: event.target.value }))}
+                inputMode="decimal"
+                placeholder="76.9558"
+              />
+            </label>
+          </form>
+        </Modal>
+
+        <Modal
+          open={deleteModalOpen}
+          title="Delete dashboard"
+          description="This removes the dashboard from your archive and scenario database."
+          onClose={() => setDeleteModalOpen(false)}
+          footer={
+            <div className="modal-coordinate-footer">
+              <button className="quiet-danger-button" type="button" onClick={() => setDeleteModalOpen(false)}>
+                Keep dashboard
+              </button>
+              <button className="danger-button solid" type="button" onClick={confirmDeleteDashboard} disabled={deletingDashboard}>
+                {deletingDashboard ? "Deleting..." : "Delete dashboard"}
+              </button>
+            </div>
+          }
+        >
+          <div className="delete-dashboard-copy">
+            <strong>{activeDashboard.title}</strong>
+            <p>{activeDashboard.location}</p>
+          </div>
+        </Modal>
+
         {message ? <div className="workspace-message">{message}</div> : null}
 
         <div className="foundation-grid">
@@ -402,7 +850,10 @@ export default function WorkspacePage() {
               <span>Current weather</span>
               <span className="sun-icon" />
             </div>
-            <strong>{Math.round(weather?.temperature ?? 28)}deg C</strong>
+            <strong className="temperature-value compact">
+              <span>{Math.round(weather?.temperature ?? 28)}</span>
+              <small>&deg;C</small>
+            </strong>
             <p>
               {weather
                 ? `Humidity at ${Math.round(weather.humidity)}%, rainfall baseline ${Math.round(weather.rainfall)} mm.`
@@ -444,11 +895,18 @@ export default function WorkspacePage() {
 
         <section className="recommendation-section">
           <div className="section-heading">
-            <h2>System Recommendations</h2>
-            <p>Based on {location.city || "field"} profile</p>
+            <div>
+              <h2>System Recommendations</h2>
+              <p>Based on {location.city || "field"} profile</p>
+            </div>
+            {recommendationList.length > 3 ? (
+              <button type="button" onClick={() => setTierModalOpen(true)}>
+                View tier list
+              </button>
+            ) : null}
           </div>
           <div className="recommendation-grid">
-            {(recommendations.length ? recommendations : activeDashboard.recommendedCrops.map(normalizeRecommendation)).map((item, index) => (
+            {visibleRecommendations.map((item, index) => (
               <button
                 className={`recommendation-card ${selectedCrop === item.crop ? "selected" : ""}`}
                 type="button"
@@ -463,6 +921,32 @@ export default function WorkspacePage() {
             ))}
           </div>
         </section>
+
+        <Modal
+          open={tierModalOpen}
+          title="Crop tier list"
+          description="Full ranking from the crop recommendation service for this field."
+          onClose={() => setTierModalOpen(false)}
+        >
+          <div className="tier-list">
+            {recommendationList.map((item, index) => (
+              <button
+                className={`tier-row ${selectedCrop === item.crop ? "selected" : ""}`}
+                type="button"
+                key={`${item.crop}-tier-${index}`}
+                onClick={() => {
+                  setSelectedCrop(item.crop);
+                  setTierModalOpen(false);
+                }}
+              >
+                <span>#{index + 1}</span>
+                <strong>{item.crop}</strong>
+                <em>{formatPercent(item.score)} suitability</em>
+                <small>{item.riskLevel} risk</small>
+              </button>
+            ))}
+          </div>
+        </Modal>
 
         <section className="deep-dive">
           <div className="section-heading">

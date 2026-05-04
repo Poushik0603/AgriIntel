@@ -83,7 +83,10 @@ export default function DashboardPage() {
             <Link to="/workspace">Change location</Link>
           </div>
           <div className="weather-main">
-            <strong>{Math.round(weather?.temperature ?? 32)}deg C</strong>
+            <strong className="temperature-value">
+              <span>{Math.round(weather?.temperature ?? 32)}</span>
+              <small>&deg;C</small>
+            </strong>
             <span>Humidity {Math.round(weather?.humidity ?? 68)}%</span>
             <small>Rising slightly</small>
           </div>

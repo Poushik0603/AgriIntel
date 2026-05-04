@@ -9,3 +9,6 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka}
+
+openweathermap:
+  api-key: ${OPENWEATHERMAP_API_KEY:}

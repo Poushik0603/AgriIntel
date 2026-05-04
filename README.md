@@ -5,6 +5,7 @@ Repository layout:
 - `frontend` - React web app
 - `backend` - microservices, API gateway, service registry, Kubernetes manifests, Maven parent, and Docker Compose
 
+
 ## Run
 
 Backend:

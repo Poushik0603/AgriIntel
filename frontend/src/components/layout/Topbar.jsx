@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAppContext } from "../../app/AppContext";
 
 export default function Topbar({ title, description }) {
-  const { apiBase, logout, session, setSidebarOpen } = useAppContext();
+  const { logout, session, setSidebarOpen } = useAppContext();
   const navigate = useNavigate();
 
   function handleLogout() {
@@ -27,12 +27,8 @@ export default function Topbar({ title, description }) {
       <div className="topbar-actions">
         <div className="status-pill">
           <span />
-          System status: optimal
+          AgriIntel workspace
         </div>
-        <div className="api-pill">{apiBase || "Proxy mode"}</div>
-        <button className="icon-button" type="button" aria-label="Notifications">
-          <span className="bell-icon" />
-        </button>
         <Link className="user-chip" to="/profile">
           <span className="avatar-icon" />
           <div>

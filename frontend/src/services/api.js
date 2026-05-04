@@ -140,16 +140,33 @@ export const scenarioService = {
   update(id, payload, apiBase, token) {
     return apiRequest(`/scenarios/${id}`, { method: "PUT", body: payload, apiBase, token });
   },
+  remove(id, apiBase, token) {
+    return apiRequest(`/scenarios/${id}`, { method: "DELETE", apiBase, token });
+  },
 };
 
 const knownLocations = [
   { label: "Chennai, TN", city: "Chennai", latitude: 13.0827, longitude: 80.2707 },
   { label: "Coimbatore Region", city: "Coimbatore", latitude: 11.0168, longitude: 76.9558 },
+  { label: "Tiruchirappalli Region", city: "Tiruchirappalli", latitude: 10.7905, longitude: 78.7047 },
   { label: "Thanjavur Delta", city: "Thanjavur", latitude: 10.787, longitude: 79.1378 },
   { label: "Madurai District", city: "Madurai", latitude: 9.9252, longitude: 78.1198 },
   { label: "Delhi NCR", city: "Delhi", latitude: 28.6139, longitude: 77.209 },
   { label: "Mumbai Region", city: "Mumbai", latitude: 19.076, longitude: 72.8777 },
 ];
+
+function cityFromNominatimAddress(address = {}) {
+  return (
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.county ||
+    address.state_district ||
+    address.state ||
+    "Mapped field"
+  );
+}
 
 function nearestKnownLocation(latitude, longitude) {
   return knownLocations
@@ -161,31 +178,29 @@ function nearestKnownLocation(latitude, longitude) {
 }
 
 export async function reverseGeocode(latitude, longitude) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/reverse");
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("lat", latitude);
+    url.searchParams.set("lon", longitude);
+    url.searchParams.set("addressdetails", "1");
 
-  if (apiKey) {
-    const url = new URL("https://maps.googleapis.com/maps/api/geocode/json");
-    url.searchParams.set("latlng", `${latitude},${longitude}`);
-    url.searchParams.set("key", apiKey);
-
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+      },
+    });
     const payload = await response.json();
-    const firstResult = payload.results?.[0];
 
-    if (payload.status === "OK" && firstResult) {
-      const locality =
-        firstResult.address_components?.find((item) => item.types.includes("locality"))?.long_name ||
-        firstResult.address_components?.find((item) => item.types.includes("administrative_area_level_2"))?.long_name ||
-        "Mapped field";
-
+    if (response.ok && payload?.display_name) {
       return {
-        label: firstResult.formatted_address,
-        city: locality,
-        source: "Google Maps Geocoding",
+        label: payload.display_name,
+        city: cityFromNominatimAddress(payload.address),
+        source: "Nominatim",
       };
     }
-
-    throw new Error(payload.error_message || "Google geocoding failed for this point.");
+  } catch {
+    // Fall through to local fallback.
   }
 
   const fallback = nearestKnownLocation(latitude, longitude);
@@ -194,4 +209,36 @@ export async function reverseGeocode(latitude, longitude) {
     city: fallback.city,
     source: "Local geocoding fallback",
   };
+}
+
+export async function searchLocations(query) {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("q", trimmed);
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("limit", "5");
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("Address search failed.");
+  }
+
+  const payload = await response.json();
+  return payload.map((item) => ({
+    label: item.display_name,
+    city: cityFromNominatimAddress(item.address),
+    latitude: Number(item.lat),
+    longitude: Number(item.lon),
+    source: "Nominatim",
+  }));
 }

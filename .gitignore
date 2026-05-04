@@ -3,4 +3,5 @@ dist/
 build/
 .env
 target/
+backend/.m2/
 *.log

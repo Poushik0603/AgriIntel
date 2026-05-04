@@ -14,6 +14,10 @@ public record ScenarioResponse(
         List<String> recommendedCrops,
         List<String> insights,
         String reportNotes,
+        Double latitude,
+        Double longitude,
+        Double markerX,
+        Double markerY,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

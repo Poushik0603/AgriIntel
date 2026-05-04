@@ -75,6 +75,16 @@ function normalizeSession(response) {
 function normalizeScenario(item, session) {
   const createdAt = item.createdAt || new Date().toISOString();
   const recommendedCrops = item.recommendedCrops?.length ? item.recommendedCrops : dashboardPlaceholder.recommendedCrops;
+  const coordinates =
+    item.coordinates ||
+    (item.latitude !== null && item.latitude !== undefined && item.longitude !== null && item.longitude !== undefined
+      ? {
+          latitude: item.latitude,
+          longitude: item.longitude,
+          x: item.markerX ?? 52,
+          y: item.markerY ?? 40,
+        }
+      : null);
 
   return {
     id: String(item.id || safeRandomId()),
@@ -88,7 +98,7 @@ function normalizeScenario(item, session) {
     recommendedCrops,
     insights: item.insights?.length ? item.insights : dashboardPlaceholder.insights,
     reportNotes: item.reportNotes || "",
-    coordinates: item.coordinates || null,
+    coordinates,
     createdAt,
     updatedAt: item.updatedAt || createdAt,
   };
@@ -107,6 +117,10 @@ function serializeScenario(dashboard, session) {
       : dashboardPlaceholder.recommendedCrops,
     insights: dashboard.insights?.length ? dashboard.insights : dashboardPlaceholder.insights,
     reportNotes: dashboard.reportNotes || "",
+    latitude: dashboard.coordinates?.latitude ?? null,
+    longitude: dashboard.coordinates?.longitude ?? null,
+    markerX: dashboard.coordinates?.x ?? null,
+    markerY: dashboard.coordinates?.y ?? null,
   };
 }
 
@@ -285,6 +299,28 @@ export function AppProvider({ children }) {
     }
   }
 
+  async function deleteDashboard(id) {
+    let deletedDashboard = null;
+    let nextDashboards = [];
+
+    setDashboards((current) => {
+      deletedDashboard = current.find((item) => String(item.id) === String(id));
+      nextDashboards = current.filter((item) => String(item.id) !== String(id));
+      saveLocalDashboards(session, nextDashboards);
+      return nextDashboards;
+    });
+
+    if (deletedDashboard?.remoteId && session?.token) {
+      try {
+        await scenarioService.remove(deletedDashboard.remoteId, apiBase, session.token);
+      } catch {
+        // Local deletion still wins so the user is not trapped by a transient sync failure.
+      }
+    }
+
+    return nextDashboards;
+  }
+
   const value = useMemo(
     () => ({
       apiBase,
@@ -299,6 +335,7 @@ export function AppProvider({ children }) {
       dashboardSyncing,
       createDashboard,
       updateDashboard,
+      deleteDashboard,
       sidebarOpen,
       setSidebarOpen,
     }),
@@ -314,6 +351,7 @@ export function AppProvider({ children }) {
       updateProfile,
       createDashboard,
       updateDashboard,
+      deleteDashboard,
     ]
   );
 

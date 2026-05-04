@@ -11,8 +11,8 @@ export default function Modal({ open, title, description, onClose, children, foo
             <h2>{title}</h2>
             {description ? <p>{description}</p> : null}
           </div>
-          <button className="icon-button" type="button" onClick={onClose}>
-            ×
+          <button className="icon-button" type="button" onClick={onClose} aria-label="Close modal">
+            x
           </button>
         </div>
         <div className="modal-body">{children}</div>

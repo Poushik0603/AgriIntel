@@ -47,6 +47,12 @@ public class ScenarioDashboardService {
                 .orElseThrow(() -> new ResourceNotFoundException("Scenario not found"));
     }
 
+    public void delete(Long id) {
+        ScenarioDashboard entity = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Scenario not found"));
+        repository.delete(entity);
+    }
+
     private ScenarioResponse toResponse(ScenarioDashboard entity) {
         return new ScenarioResponse(
                 entity.getId(),
@@ -59,6 +65,10 @@ public class ScenarioDashboardService {
                 entity.getRecommendedCrops(),
                 entity.getInsights(),
                 entity.getReportNotes(),
+                entity.getLatitude(),
+                entity.getLongitude(),
+                entity.getMarkerX(),
+                entity.getMarkerY(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -74,6 +84,10 @@ public class ScenarioDashboardService {
         entity.setRecommendedCrops(request.recommendedCrops() == null ? List.of() : request.recommendedCrops());
         entity.setInsights(request.insights() == null ? List.of() : request.insights());
         entity.setReportNotes(request.reportNotes());
+        entity.setLatitude(request.latitude());
+        entity.setLongitude(request.longitude());
+        entity.setMarkerX(request.markerX());
+        entity.setMarkerY(request.markerY());
     }
 
     private boolean hasText(String value) {

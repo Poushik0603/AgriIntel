@@ -14,6 +14,10 @@ public record ScenarioRequest(
         List<String> selectedCrops,
         List<String> recommendedCrops,
         List<String> insights,
-        String reportNotes
+        String reportNotes,
+        Double latitude,
+        Double longitude,
+        Double markerX,
+        Double markerY
 ) {
 }

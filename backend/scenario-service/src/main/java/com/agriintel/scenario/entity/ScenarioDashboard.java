@@ -38,6 +38,14 @@ public class ScenarioDashboard {
     @Column(length = 4000)
     private String reportNotes;
 
+    private Double latitude;
+
+    private Double longitude;
+
+    private Double markerX;
+
+    private Double markerY;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "scenario_selected_crops", joinColumns = @JoinColumn(name = "scenario_id"))
     @Column(name = "crop_name")
@@ -112,6 +120,38 @@ public class ScenarioDashboard {
 
     public void setReportNotes(String reportNotes) {
         this.reportNotes = reportNotes;
+    }
+
+    public Double getLatitude() {
+        return latitude;
+    }
+
+    public void setLatitude(Double latitude) {
+        this.latitude = latitude;
+    }
+
+    public Double getLongitude() {
+        return longitude;
+    }
+
+    public void setLongitude(Double longitude) {
+        this.longitude = longitude;
+    }
+
+    public Double getMarkerX() {
+        return markerX;
+    }
+
+    public void setMarkerX(Double markerX) {
+        this.markerX = markerX;
+    }
+
+    public Double getMarkerY() {
+        return markerY;
+    }
+
+    public void setMarkerY(Double markerY) {
+        this.markerY = markerY;
     }
 
     public List<String> getSelectedCrops() {

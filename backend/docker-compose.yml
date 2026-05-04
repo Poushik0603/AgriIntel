@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   service-registry:
     build: ./service-registry
@@ -21,6 +19,7 @@ services:
       - service-registry
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
+      OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY:-}
     ports:
       - "8083:8083"
 
