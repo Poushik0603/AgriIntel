@@ -45,6 +45,11 @@ services:
     ports:
       - "8081:8081"
 
+  ml-price-service:
+    build: ./ml-price-service
+    ports:
+      - "8001:8000"
+
   mysql-user:
     image: mysql:8.0
     environment:
@@ -104,12 +109,14 @@ services:
     depends_on:
       - service-registry
       - mysql-price
+      - ml-price-service
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
       DB_HOST: mysql-price
       DB_NAME: price_db
       DB_USERNAME: root
       DB_PASSWORD: root
+      ML_PRICE_SERVICE_URL: http://ml-price-service:8000
     ports:
       - "8082:8082"
 

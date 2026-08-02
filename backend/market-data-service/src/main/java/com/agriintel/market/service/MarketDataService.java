@@ -28,6 +28,13 @@ public class MarketDataService {
         return mapResponse(repository.save(entity));
     }
 
+    public int ingest(List<CropPriceHistoryRequest> requests) {
+        List<CropPriceHistory> entities = requests.stream()
+                .map(request -> mapRequest(request, new CropPriceHistory()))
+                .toList();
+        return repository.saveAll(entities).size();
+    }
+
     public List<CropPriceHistoryResponse> findAll(String crop, LocalDate fromDate, LocalDate toDate) {
         return repository.findByFilters(crop, fromDate, toDate).stream().map(this::mapResponse).toList();
     }

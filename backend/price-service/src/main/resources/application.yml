@@ -24,3 +24,9 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka}
+
+ml:
+  price-service:
+    base-url: ${ML_PRICE_SERVICE_URL:http://ml-price-service:8000}
+    connect-timeout-ms: ${ML_PRICE_SERVICE_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${ML_PRICE_SERVICE_READ_TIMEOUT_MS:3000}

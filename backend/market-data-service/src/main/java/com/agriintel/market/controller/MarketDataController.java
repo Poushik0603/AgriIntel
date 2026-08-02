@@ -2,10 +2,12 @@ package com.agriintel.market.controller;
 
 import com.agriintel.market.dto.CropPriceHistoryRequest;
 import com.agriintel.market.dto.CropPriceHistoryResponse;
+import com.agriintel.market.dto.IngestResponse;
 import com.agriintel.market.dto.MarketTrendSummaryResponse;
 import com.agriintel.market.service.MarketDataService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -13,6 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/market-data")
+@Validated
 public class MarketDataController {
 
     private final MarketDataService marketDataService;
@@ -25,6 +28,12 @@ public class MarketDataController {
     @ResponseStatus(HttpStatus.CREATED)
     public CropPriceHistoryResponse create(@Valid @RequestBody CropPriceHistoryRequest request) {
         return marketDataService.create(request);
+    }
+
+    @PostMapping("/ingest")
+    @ResponseStatus(HttpStatus.CREATED)
+    public IngestResponse ingest(@Valid @RequestBody List<CropPriceHistoryRequest> requests) {
+        return new IngestResponse(marketDataService.ingest(requests));
     }
 
     @GetMapping
