@@ -23,18 +23,25 @@ services:
     ports:
       - "8083:8083"
 
+  ml-crop-service:
+    build: ./ml-crop-service
+    ports:
+      - "8000:8000"
+
   crop-service:
     build: ./crop-service
     depends_on:
       - service-registry
       - weather-service
       - mysql-crop
+      - ml-crop-service
     environment:
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://service-registry:8761/eureka
       DB_HOST: mysql-crop
       DB_NAME: crop_db
       DB_USERNAME: root
       DB_PASSWORD: root
+      ML_CROP_SERVICE_URL: http://ml-crop-service:8000
     ports:
       - "8081:8081"
 

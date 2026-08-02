@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-crop-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-crop-service
+  template:
+    metadata:
+      labels:
+        app: ml-crop-service
+    spec:
+      containers:
+        - name: ml-crop-service
+          image: agriintel-ml-crop-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-crop-service
+spec:
+  selector:
+    app: ml-crop-service
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

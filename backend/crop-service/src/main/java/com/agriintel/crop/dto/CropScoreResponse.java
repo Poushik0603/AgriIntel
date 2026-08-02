@@ -5,5 +5,6 @@ public record CropScoreResponse(String crop,
                                 double riskScore,
                                 String riskLevel,
                                 String reason,
-                                String limitation) {
+                                String limitation,
+                                String scoringSource) {
 }

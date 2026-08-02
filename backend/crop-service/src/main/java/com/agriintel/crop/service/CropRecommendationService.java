@@ -1,10 +1,13 @@
 package com.agriintel.crop.service;
 
+import com.agriintel.crop.client.MlCropScoringClient;
 import com.agriintel.crop.dto.CropRecommendationRequest;
 import com.agriintel.crop.dto.CropRecommendationResponse;
 import com.agriintel.crop.dto.CropScoreResponse;
 import com.agriintel.crop.dto.SoilSnapshot;
 import com.agriintel.crop.dto.WeatherResponse;
+import com.agriintel.crop.dto.ml.MlCropPrediction;
+import com.agriintel.crop.dto.ml.MlPredictResponse;
 import com.agriintel.crop.entity.CropRecommendationAudit;
 import com.agriintel.crop.repository.CropRecommendationAuditRepository;
 import org.springframework.stereotype.Service;
@@ -13,27 +16,38 @@ import org.springframework.web.client.RestTemplate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class CropRecommendationService {
 
+    private static final List<String> CANDIDATE_CROPS =
+            List.of("Rice", "Millet", "Wheat", "Cotton", "Maize", "Sorghum", "Groundnut");
+
     private final RestTemplate restTemplate;
     private final RestTemplate externalRestTemplate = new RestTemplate();
     private final CropRecommendationAuditRepository auditRepository;
+    private final MlCropScoringClient mlCropScoringClient;
 
-    public CropRecommendationService(RestTemplate restTemplate, CropRecommendationAuditRepository auditRepository) {
+    public CropRecommendationService(RestTemplate restTemplate,
+                                      CropRecommendationAuditRepository auditRepository,
+                                      MlCropScoringClient mlCropScoringClient) {
         this.restTemplate = restTemplate;
         this.auditRepository = auditRepository;
+        this.mlCropScoringClient = mlCropScoringClient;
     }
 
     public CropRecommendationResponse recommend(CropRecommendationRequest request) {
         double rainfall = request.rainfall() == null ? 0 : request.rainfall();
         double temperature = request.temperature() == null ? 0 : request.temperature();
+        double humidity = request.humidity() == null ? 0 : request.humidity();
 
-        if ((request.rainfall() == null || request.temperature() == null) && request.city() != null && !request.city().isBlank()) {
+        boolean needsWeather = request.rainfall() == null || request.temperature() == null || request.humidity() == null;
+        if (needsWeather && request.city() != null && !request.city().isBlank()) {
             WeatherResponse weather = restTemplate.getForObject(
                     "http://weather-service/weather?city={city}",
                     WeatherResponse.class,
@@ -42,6 +56,7 @@ public class CropRecommendationService {
             if (weather != null) {
                 rainfall = request.rainfall() != null ? request.rainfall() : weather.rainfall();
                 temperature = request.temperature() != null ? request.temperature() : weather.temperature();
+                humidity = request.humidity() != null ? request.humidity() : weather.humidity();
             }
         }
 
@@ -50,9 +65,14 @@ public class CropRecommendationService {
         double enrichedRainfall = rainfall;
         double enrichedTemperature = temperature;
 
-        List<CropScoreResponse> rankedCrops = List.of("Rice", "Millet", "Wheat", "Cotton", "Maize", "Sorghum", "Groundnut")
+        List<CropScoreResponse> rankedCrops = CANDIDATE_CROPS
                 .stream()
                 .map(crop -> scoreCrop(crop, enrichedRainfall, enrichedTemperature, request.soilType(), soilSnapshot))
+                .toList();
+
+        rankedCrops = applyMlScoring(rankedCrops, soilSnapshot, enrichedTemperature, humidity, enrichedRainfall);
+
+        rankedCrops = rankedCrops.stream()
                 .sorted(Comparator.comparingDouble(CropScoreResponse::score).reversed())
                 .toList();
 
@@ -95,7 +115,45 @@ public class CropRecommendationService {
                 + Math.round(soilFit * 100) + "% soil fit, and "
                 + Math.round(nutrientFit * 100) + "% nutrient fit.";
 
-        return new CropScoreResponse(crop, score, riskScore, riskLevel, reason, "");
+        return new CropScoreResponse(crop, score, riskScore, riskLevel, reason, "", "RULE_BASED");
+    }
+
+    private List<CropScoreResponse> applyMlScoring(List<CropScoreResponse> rankedCrops,
+                                                    SoilSnapshot soil,
+                                                    double temperature,
+                                                    double humidity,
+                                                    double rainfall) {
+        Optional<MlPredictResponse> mlResponse = mlCropScoringClient.score(
+                soil.nitrogen(), soil.phosphorus(), soil.potassium(),
+                temperature, humidity, soil.ph(), rainfall, CANDIDATE_CROPS);
+
+        if (mlResponse.isEmpty()) {
+            return rankedCrops;
+        }
+
+        Map<String, Double> probabilityByCrop = new HashMap<>();
+        for (MlCropPrediction prediction : mlResponse.get().predictions()) {
+            probabilityByCrop.put(prediction.crop(), prediction.probability());
+        }
+
+        if (probabilityByCrop.isEmpty()) {
+            return rankedCrops;
+        }
+
+        List<CropScoreResponse> merged = new ArrayList<>();
+        for (CropScoreResponse crop : rankedCrops) {
+            Double probability = probabilityByCrop.get(crop.crop());
+            if (probability == null) {
+                merged.add(crop);
+                continue;
+            }
+            double mlScore = Math.min(0.98, Math.max(0.35, roundScore(0.35 + probability * 0.63)));
+            String reason = crop.crop() + " ML model predicts "
+                    + Math.round(probability * 100) + "% suitability based on soil N-P-K, pH, temperature, "
+                    + "humidity, and rainfall.";
+            merged.add(new CropScoreResponse(crop.crop(), mlScore, crop.riskScore(), crop.riskLevel(), reason, crop.limitation(), "ML"));
+        }
+        return merged;
     }
 
     private List<CropScoreResponse> addRelativeLimitations(List<CropScoreResponse> rankedCrops) {
@@ -118,7 +176,8 @@ public class CropRecommendationService {
                     crop.riskScore(),
                     crop.riskLevel(),
                     crop.reason(),
-                    limitation
+                    limitation,
+                    crop.scoringSource()
             ));
         }
         return adjusted;

@@ -20,3 +20,9 @@ eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_CLIENT_SERVICEURL_DEFAULTZONE:http://service-registry:8761/eureka}
+
+ml:
+  crop-service:
+    base-url: ${ML_CROP_SERVICE_URL:http://ml-crop-service:8000}
+    connect-timeout-ms: ${ML_CROP_SERVICE_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${ML_CROP_SERVICE_READ_TIMEOUT_MS:3000}
