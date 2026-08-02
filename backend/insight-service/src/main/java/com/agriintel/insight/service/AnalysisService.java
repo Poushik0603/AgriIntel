@@ -5,7 +5,6 @@ import com.agriintel.insight.dto.AnalysisResponse;
 import com.agriintel.insight.dto.CropComparisonDto;
 import com.agriintel.insight.dto.CropRecommendationRequest;
 import com.agriintel.insight.dto.CropRecommendationResponse;
-import com.agriintel.insight.dto.LoanSuggestion;
 import com.agriintel.insight.dto.MarketDataRecordDto;
 import com.agriintel.insight.dto.PricePredictionDto;
 import com.agriintel.insight.dto.ProfitabilityLevel;
@@ -37,9 +36,11 @@ import java.util.stream.Collectors;
 public class AnalysisService {
 
     private final RestTemplate restTemplate;
+    private final InsightNarrationService insightNarrationService;
 
-    public AnalysisService(RestTemplate restTemplate) {
+    public AnalysisService(RestTemplate restTemplate, InsightNarrationService insightNarrationService) {
         this.restTemplate = restTemplate;
+        this.insightNarrationService = insightNarrationService;
     }
 
     public AnalysisResponse analyze(AnalysisRequest request) {
@@ -77,16 +78,16 @@ public class AnalysisService {
 
         ProfitabilityLevel profitability = deriveOverallProfitability(selectedAnalysis);
         RiskLevel riskLevel = deriveOverallRisk(selectedAnalysis, weather);
-        LoanSuggestion loanSuggestion = deriveLoanSuggestion(profitability, riskLevel);
 
-        List<String> insights = generateInsights(request, weather, cropResponse, selectedAnalysis, profitability, riskLevel);
+        List<String> insights = insightNarrationService.narrate(
+                request, weather, cropResponse, selectedAnalysis, profitability, riskLevel);
 
         List<RankedCropDto> rankedRecommendations = adjustRecommendations(
                 cropResponse != null ? cropResponse.recommendedCrops() : List.of(),
                 request.discountFactor()
         );
 
-        return new AnalysisResponse(weather, rankedRecommendations, selectedAnalysis, riskLevel, profitability, loanSuggestion, insights, comparison);
+        return new AnalysisResponse(weather, rankedRecommendations, selectedAnalysis, riskLevel, profitability, insights, comparison);
     }
 
     private List<String> buildAnalysisCropList(List<String> selectedCrops, CropRecommendationResponse cropResponse) {
@@ -237,40 +238,6 @@ public class AnalysisService {
         }
         long medium = selectedAnalysis.stream().filter(item -> item.riskLevel() == RiskLevel.MEDIUM).count();
         return medium > 0 ? RiskLevel.MEDIUM : RiskLevel.LOW;
-    }
-
-    private LoanSuggestion deriveLoanSuggestion(ProfitabilityLevel profitability, RiskLevel riskLevel) {
-        if (profitability == ProfitabilityLevel.HIGH && riskLevel == RiskLevel.LOW) {
-            return LoanSuggestion.APPROVED;
-        }
-        if (profitability == ProfitabilityLevel.LOW || riskLevel == RiskLevel.HIGH) {
-            return LoanSuggestion.REJECTED;
-        }
-        return LoanSuggestion.CONDITIONAL;
-    }
-
-    private List<String> generateInsights(AnalysisRequest request,
-                                          WeatherSnapshot weather,
-                                          CropRecommendationResponse cropResponse,
-                                          List<SelectedCropAnalysisDto> selectedAnalysis,
-                                          ProfitabilityLevel profitability,
-                                          RiskLevel riskLevel) {
-        List<String> insights = new ArrayList<>();
-        if (weather != null) {
-            insights.add("Weather baseline for " + weather.city() + " shows " + weather.temperature() + "C temperature and " + weather.rainfall() + " mm rainfall.");
-        }
-        if (cropResponse != null && cropResponse.recommendedCrops() != null && !cropResponse.recommendedCrops().isEmpty()) {
-            RankedCropDto topCrop = cropResponse.recommendedCrops().getFirst();
-            insights.add("Top agronomic recommendation is " + topCrop.crop() + " with a suitability score of " + topCrop.score() + ".");
-        }
-        selectedAnalysis.forEach(item -> insights.add(
-                item.crop() + " shows " + item.profitability().name() + " profitability with " + item.riskLevel().name() + " risk and spread " + item.spread() + "."
-        ));
-        if (request.discountFactor() != null && request.discountFactor().compareTo(BigDecimal.ZERO) > 0) {
-            insights.add("Discount factor " + request.discountFactor() + " was applied to make profitability assumptions more conservative.");
-        }
-        insights.add("Overall analyst view: profitability is " + profitability.name() + " and risk is " + riskLevel.name() + ".");
-        return insights;
     }
 
     private double roundScore(double value) {

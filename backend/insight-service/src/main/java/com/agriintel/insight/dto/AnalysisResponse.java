@@ -8,7 +8,6 @@ public record AnalysisResponse(
         List<SelectedCropAnalysisDto> selectedCropAnalysis,
         RiskLevel riskLevel,
         ProfitabilityLevel profitability,
-        LoanSuggestion loanSuggestion,
         List<String> insights,
         List<CropComparisonDto> comparison
 ) {
